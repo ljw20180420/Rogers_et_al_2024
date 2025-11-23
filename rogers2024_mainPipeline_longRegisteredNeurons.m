@@ -58,249 +58,177 @@
 %each session subfield is calcium, a table of traces; stimulusTimes, a
 %vector of stimulus delivery times; and freezing, a table of freezing
 
+addpath('D:\z_serious_works\Rogers_et_al_2024/Custom functions/')
+addpath('D:\z_serious_works\Rogers_et_al_2024/Rogers2024_CalciumData_AllAnimals/mm39/')
+load('D:\z_serious_works\Rogers_et_al_2024/rogers2025CalciumData.mat')
 
-load('/Users/Rogers1/Documents/rogers2024CalciumData.mat')
-%%
-% metadata of experimental design.
-trialStructure = table2array(rogers2024.trialStructure);
-start = trialStructure(1); % trial start. defined here ashow much time back from stimulus times to begin collecting data. (seconds)
-fin = trialStructure(2);   % how much time after stimulus start to stop collecting data. (seconds)
-dt = trialStructure(3);    % sampling rate of recording (Hz)
-nSesh = trialStructure(4); %number of sessions
-trialLength = start+fin+1; %length of trial (seconds)
-nTrials = trialStructure(5); %number of total trials
-nAnimals = length(rogers2024.animals); %number of animals is the number of substructures
-videoOffset = trialStructure(6); %
+% rogers2024.trialStructure.trialStart. defined here as how much time back from stimulus times to begin collecting data. (seconds)
+% rogers2024.trialStructure.trialEnd. how much time after stimulus start to stop collecting data. (seconds)
+downSamplingRate = 15;
+%length of trial (seconds)
+trialLength = rogers2024.trialStructure.trialStart + rogers2024.trialStructure.trialEnd + 1;
 
-%experimental groups
-groupIDs{1}= rogers2024.groups(1).members; %rapid
-groupIDs{2}= rogers2024.groups(2).members; %slow
-groupIDs{3}= rogers2024.groups(3).members; %responders
-groupIDs{4}= rogers2024.groups(4).members;  %nonresponders
-groupNames = {rogers2024.groups(1).name,rogers2024.groups(2).name,rogers2024.groups(3).name,rogers2024.groups(4).name};
-nGroups = length(groupIDs); %number of sessions
-
-%define trial event times
-bl = rogers2024.stimuli(1).times;  %seconds
-stim = rogers2024.stimuli(2).times; %seconds
-trace = rogers2024.stimuli(3).times; %seconds
-shock = rogers2024.stimuli(4).times; %seconds
-
-stimuliNames = {rogers2024.stimuli(1).name,rogers2024.stimuli(2).name,rogers2024.stimuli(3).name,rogers2024.stimuli(4).name};
-
-%assign trials to sessions
-hab = rogers2024.sessions(1).trials; %trials
-acq = rogers2024.sessions(2).trials; %trials
-ext1 = rogers2024.sessions(3).trials; %trials
-ext2 = rogers2024.sessions(4).trials; %trials
-ext3 = rogers2024.sessions(5).trials; %trials
-sessions = {hab, acq, ext1, ext2, ext3};
-sessionNames = {rogers2024.sessions(1).name,rogers2024.sessions(2).name,rogers2024.sessions(3).name,rogers2024.sessions(4).name,rogers2024.sessions(5).name};
-
-
-% 2. Extract traces of longitudinal cells and align to stimuli
+%% 2. Extract traces of longitudinal cells and align to stimuli
 
 %CUSTOM FUNCTIONS REQUIRED:
 %   crossSeshAuto
 %   aligntraces
 
-%outputs
-nCells = zeros(nAnimals,1);  %initialize array to store number of cells per animal
-lr = cell(nAnimals,nSesh);   %initialize cell to store original activity matrices downsampled to 15Hz, for freezing decoding later
-tensors = cell(nAnimals,1);  %initialize cell to store same information as poolMat but arranged in tensors of t seconds X c cells X T trials. Export for use in tensortools python kit
-spatial = cell(nAnimals,1);  %initialize cell to store spatial coordinates of longitudinally registered cells
-poolMat = [];
-
-for n=1:nAnimals
-    
-    %initialize temp storage
-    reRegistered={};
-    dA = {};
-    timesA = {};
-    
-    %loop through number of recordings and store raw traces
-    nRec= length(rogers2024.animals(n).sessions);
-    for m=1:nRec
-        dA{m,1} = rogers2024.animals(n).sessions(m).calcium;
-    end
-    
-    %call temporal regristration and spatial registration tables
-    L = table2array(rogers2024.animals(n).cellreg);
-    locs = rogers2024.animals(n).cellprops;
+for a=1:length(rogers2024.animals)
         
-   %longitudinally register and spatially locate cells across 5 sessions
-    [longRegistered, coordinates]= crossSeshAuto(L,dA,locs,nRec);
-    
-   %store spatial data
-   spatial{n,1} = coordinates;
+    %longitudinally register and spatially locate cells across 5 sessions
+    [longRegistered, coordinates{a}] = crossSeshAuto( ...
+        rogers2024.animals(a).cellreg, ...
+        {rogers2024.animals(a).sessions.calcium}, ...
+        rogers2024.animals(a).cellprops ...
+    );
    
-   %repair broken recordings in 3 animals
-    if n == 12
-        reRegistered{1,1} = [longRegistered{1,1}];
-        reRegistered{2,1} = [longRegistered{2,1}];
-        reRegistered{3,1} = [longRegistered{3,1}; longRegistered{4,1}];
-        reRegistered{4,1} = [longRegistered{5,1}];
-        reRegistered{5,1} = [longRegistered{6,1}];
-        longRegistered = reRegistered;
-    elseif n == 13
-        x=longRegistered{1,1};
-        y=longRegistered{2,1};
-        reRegistered{1,1} = [x; x(end-16.8*dt/2+1:end,:); y(1:16.8*dt/2,:); y];
-        reRegistered{2,1} = [longRegistered{3,1}];
-        reRegistered{3,1} = [longRegistered{4,1}];
-        reRegistered{4,1} = [longRegistered{5,1}];
-        reRegistered{5,1} = [longRegistered{6,1}];
-        longRegistered = reRegistered;
-    elseif n == 28
-        reRegistered{1,1} = [longRegistered{1,1}; longRegistered{2,1}];
-        reRegistered{2,1} = [longRegistered{3,1}];
-        reRegistered{3,1} = [longRegistered{4,1}];
-        reRegistered{4,1} = [longRegistered{5,1}];
-        reRegistered{5,1} = [longRegistered{6,1}];
-        longRegistered = reRegistered;
+    %repair broken recordings in 3 animals
+    if a == 12
+        longRegistered = {
+            longRegistered{1}, ...
+            longRegistered{2}, ...
+            [
+                longRegistered{3};
+                longRegistered{4}
+            ], ...
+            longRegistered{5}, ...
+            longRegistered{6}
+        };
+    elseif a == 13
+        longRegistered = {
+            [
+                longRegistered{1}; 
+                longRegistered{1}(end-16.8*rogers2024.trialStructure.samplingRate/2+1:end,:);
+                longRegistered{2}(1:16.8*rogers2024.trialStructure.samplingRate/2,:);
+                longRegistered{2}
+            ], ...
+            longRegistered{3}, ...
+            longRegistered{4}, ...
+            longRegistered{5}, ...
+            longRegistered{6}
+        };
+    elseif a == 28
+        longRegistered = {
+            [
+                longRegistered{1};
+                longRegistered{2}
+            ], ...
+            longRegistered{3}, ...
+            longRegistered{4}, ...
+            longRegistered{5}, ...
+            longRegistered{6}
+        };
     end
     
     %loop through sessions, downsample registered traces to 15Hz and store.
     %also store stimulus delivery times
-     for m=1:nSesh
-        x=resample(longRegistered{m,1},3,4);
-        lr{n,m} = x;
-        
-        timesA{m,1} = rogers2024.animals(n).sessions(m).stimulusTimes;
-     end
+    for m=1:rogers2024.trialStructure.nSessions
+        lr{a,m} = resample(longRegistered{m}, downSamplingRate, rogers2024.trialStructure.samplingRate);
+    end
     
     %store number of cells
-    nCells(n,1) = size(longRegistered{1,1},2);
+    nCells(a) = size(longRegistered{1}, 2);
     
     %align traces to stimulus times and store 1Hz data at the predefined
     %trial windows
-    alignedTraces = aligntraces(longRegistered,timesA,nSesh,dt,start,fin);
+    poolMat{a} = aligntraces( ...
+        longRegistered, ...
+        {rogers2024.animals(a).sessions.stimulusTimes}, ...
+        rogers2024.trialStructure.nSessions, ...
+        rogers2024.trialStructure.samplingRate, ...
+        rogers2024.trialStructure.trialStart, ...
+        rogers2024.trialStructure.trialEnd ...
+    );
     
-    %concatenate aligned traces
-    allAligned = [alignedTraces{1,1}; alignedTraces{2,1}; alignedTraces{3,1}; alignedTraces{4,1}; alignedTraces{5,1}];
-    
-    %transform into t x c x T tensor and store
-    ten = zeros(trialLength, nCells(n), nTrials);
-    for t=1:nTrials
-        ten(:,:,t) = allAligned(trialLength*(t-1)+1:trialLength*t,:);
+    %transform into s x c x t tensor and store
+    tensors{a} = zeros(trialLength, nCells(a), rogers2024.trialStructure.nTrialsTotal);
+    for t=1:rogers2024.trialStructure.nTrialsTotal
+        tensors{a}(:,:,t) = poolMat{a}(trialLength*(t-1)+1:trialLength*t,:);
     end
-    tensors{n,1} = ten;
-    
-    poolMat= [poolMat allAligned];
 end
+poolMat = [poolMat{:}];
 
 
 %% 3.Plot spatial coordinates of longitudinally registered cells. Fig 2B 
 
 %enter animal number of interest; dataset 1 animal 1 is the representative image
-animal = 1; 
-propM39{1,1} = readtable('mm39hab-props.csv'); propM39{2,1} = readtable('mm39acq-props.csv'); propM39{3,1} = readtable('mm39ext1-props.csv'); propM39{4,1} = readtable('mm39ext2-props.csv'); propM39{5,1} = readtable('mm39ext3-props.csv');
-data = spatial{animal};
-
-for m=1:nSesh
-    dat = propM39{m,1};
-    posX{1,m} = table2array(dat(:,6));
-    posY{1,m} = table2array(dat(:,7));
-    diameter{1,m} = table2array(dat(:,9));
-end
-
+propM39 = {
+    readtable('mm39hab-props.csv'), ...
+    readtable('mm39acq-props.csv'), ...
+    readtable('mm39ext1-props.csv'), ...
+    readtable('mm39ext2-props.csv'), ...
+    readtable('mm39ext3-props.csv')
+};
 
 %plot cells at x coordinate by y coordinate at their size in pixels, scaled up to be visible
 colors = {[.5 .5 .5], [1 0 0], [0.9290 0.6940 0.1250], [0 1 0], [0 1 1]};
 figure
-for m=1:nSesh
+for m=1:rogers2024.trialStructure.nSessions
     hold on
-    scatter(posX{1,m},posY{1,m},diameter{1,m}.*(20-3*(m-1)),colors{m},'filled')
+    scatter(propM39{m}.CentroidX, propM39{m}.CentroidY, propM39{m}.Size * (20-3*(m-1)), colors{m}, 'filled')
 end
 hold on
-scatter(data(:,1),data(:,2),data(:,3).*8,[0.4940 0.1840 0.5560]) 
+scatter(coordinates{1}(:,1), coordinates{1}(:,2), coordinates{1}(:,3) * 8, [0.4940 0.1840 0.5560]) 
 %% 4. for fig 2D - heatmaps of average traces
 
 %CUSTOM FUNCTIONS
 % percBaselineAvg
 
-%initialize storage cell average session activity of each animal by session 
-%avPB = cell(nAnimals, nSesh); 
-avPBt = cell(nAnimals, nSesh); 
+%storage cell average session activity of each animal by session
 %loop through animals
-for n=1:25%nAnimals %can look at specific groups by replacing "1:nAnimals" with saline, responders, nonresponders, or non-shock
-     
+for a=1:length(rogers2024.animals) %can look at specific groups by replacing "1:length(rogers2024.animals)" with saline, responders, nonresponders, or non-shock
     %call t x c x T data from tensors and convert to time x cells matrix
-    data = tensors{n};
+    data = tensors{a};
     %zscore to baseline
-    data = (data-mean(data(1:10,:,:)))./std(data(1:10,:,:));
-    
-    %initialize temp storage
-    avPB = zeros(trialLength,nCells(n),nSesh);
+    data = (data - mean(data(rogers2024.stimuli(1).times, :, :))) ./ std(data(rogers2024.stimuli(1).times, :, :));
     
     %loop through sessions
-    for m=1:nSesh
-        
-        trials = sessions{m};
-        
-        act = median(data(:,:,sessions{m}),3);
-        
+    for m=1:rogers2024.trialStructure.nSessions
         %store median zscore in time x cells x session tensor
-        avPB(:,:,m) = act;
-        
+        avPBt{a}{m} = median(data(:, :, rogers2024.sessions(m).trials), 3);
     end
-    %store tensor for each animal
-    avPBt{n} = avPB;
+    avPBt{a} = cat(3, avPBt{a}{:});
 end
 
 %pool cells from all animals within sessions
-poolAvgAct = cell(nSesh,nGroups);
-
 %loop through animals to pool mean trial activity in a session
-for g=1:4
-    for n = rogers2024.groups(g).members
-    
-    %call mean % baseline tensor from animal
-    data1 = avPBt{n};
-    
-    %loop through sessions
-    for m=1:nSesh
-        
-        %call a specific session
-        data = data1(:,:,m);
-        
-        %store all average traces in a session from every animal
-        pool = [poolAvgAct{m,g}, data];
-        poolAvgAct{m,g} = pool;
+for g=1:length(rogers2024.groups)
+    for a = rogers2024.groups(g).members
+        %loop through sessions
+        for m=1:rogers2024.trialStructure.nSessions
+            %store all average traces in a session from every animal
+            poolAvgAct{m,g}{a} = avPBt{a}(:,:,m);
+        end
     end
-    
-    %store pooled traces by session
+    for m=1:rogers2024.trialStructure.nSessions
+        poolAvgAct{m,g} = [poolAvgAct{m,g}{:}];
     end
 end
 
-%sort data to shock
-acqAct = poolAvgAct{5,1};
-[B,I] = sort(mean(acqAct(shock,:)));
-c = palette('scheme',4);
 %plot
-titles = {'Hab','Acq','Ext1','Ext2','Ext3'};
 figure
-for g=1:4
-    acqAct = poolAvgAct{2,g};
-    [B,I] = sort(mean(acqAct(shock,:)));
+for g=1:length(rogers2024.groups)
+    %sort data to shock
+    [~, I] = sort(mean(poolAvgAct{2,g}(rogers2024.stimuli(4).times, :)));
     length(I)
-    for m=1:nSesh
-        subplot(4,5,m+5*(g-1))
+    for m=1:rogers2024.trialStructure.nSessions
+        subplot(length(rogers2024.groups), rogers2024.trialStructure.nSessions, m + 5 * (g - 1))
 
         data2plot = poolAvgAct{m,g};
         h=heatmap(data2plot(:,I)','Colorlimits',[-2 2]);
-        colormap(c)
+        colormap(hot)
         if g==1
-        title(titles{m})
+            title(rogers2024.sessions(m).name)
         end
         ylabel('Cells')
-        if g==4
-        xlabel('Time')
+        if g==length(rogers2024.groups)
+            xlabel('Time')
         end
         h.XDisplayLabels = repmat({''}, 1, size(h.ColorData, 2));
         h.YDisplayLabels = repmat({''}, 1, size(h.ColorData, 1));
-        if m<5
-        h.ColorbarVisible = 'off';
+        if m < rogers2024.trialStructure.nSessions
+            h.ColorbarVisible = 'off';
         end
         grid off
     end
@@ -311,63 +239,39 @@ end
 %% 5. Identify cells that are upregulated or downregulated in response to stimuli in a given session according to their average trace for fig 2J-M
 
 %CUSTOM FUNCTIONS
-%permTest
-tone = [11:35];
-trace = [36:55];
-shock = [56:60];
-bl = {[1:10],[1:10],[1:10],[1:10]};
-stimuli = {tone, trace, [tone trace], shock};
-allCellsEver = cell(nAnimals, 8);
-allCellsTrials = cell(nAnimals, 8);
-numIt = 1000;
+%permTest shock = 56:60 instead of rogers2024.stimuli(4).times
+stimuli = {
+    rogers2024.stimuli(2).times, ...
+    rogers2024.stimuli(3).times, ...
+    [rogers2024.stimuli(2).times rogers2024.stimuli(3).times], ...
+    56:60
+};
 
-for a=1:nAnimals
-    data = poolMat(:,sum(nCells(1:a-1))+1:sum(nCells(1:a)));
-    
-    disp(a)
-    for m=1:nSesh
-        trialSet = sessions{m};
-        
-        %make data tensors
-        x = zeros(60,size(data,2),length(trialSet));
-        for t=1:length(trialSet)
-            x(:,:,t) = data(60*(trialSet(t)-1)+1:60*(trialSet(t)),:);
-        end
-        %zscore compared to baseline
-        x = (x-mean(x(1:10,:,:)))./std(x(1:10,:,:));
-        
-        %median zscore
-        data2 = squeeze(median(x,3));
-        
+for a=1:length(rogers2024.animals)
+    for m=1:rogers2024.trialStructure.nSessions        
         %for tone, trace, tone+trace, shock
-        for k=1:4
-            stim = stimuli{k};
-            bL = bl{k};
-            
-            
-            responses = isSig(data2,bL,stim);
-            
-            sigCells{a,m,k} = responses;
+        for k=1:length(stimuli)
+            sigCells{a,m,k} = isSig(avPBt{a}(:,:,m), rogers2024.stimuli(1).times, stimuli{k});
         end
     end
 end
 
 %calculate fractions of activated neurons
-for a=1:nAnimals
-    for m=1:nSesh
-        for k=1:4
-            fracs(a,m,k)=length(sigCells{a,m,k}{1})/nCells(a);
+for a=1:length(rogers2024.animals)
+    for m=1:rogers2024.trialStructure.nSessions
+        for k=1:length(stimuli)
+            fracs(a,m,k) = length(sigCells{a,m,k}{1}) / nCells(a);
         end
     end
 end
 
 %plot
 figure
-for k=1:4
-    subplot(2,2,k)
-    for g = 1:nGroups
-    errorbar(mean(fracs(rogers2024.groups(g).members,:,k)),std(fracs(rogers2024.groups(g).members,:,k))./sqrt(length(rogers2024.groups(g).members)))
-    hold on
+for k=1:length(stimuli)
+    subplot(2, 2, k)
+    for g = 1:length(rogers2024.groups)
+        errorbar(mean(fracs(rogers2024.groups(g).members, :, k)), std(fracs(rogers2024.groups(g).members, :, k)) ./ sqrt(length(rogers2024.groups(g).members)))
+        hold on
     end
 end
 
@@ -379,238 +283,189 @@ end
 %permTest
 
 %loop through animals to identify tone, trace, and shock responsive neurons
-for a = 1:25%nAnimals
+for a = 1:length(rogers2024.animals)
     %call average activity tensor 
-    toTake = 0;
-    if a>1
-        toTake = sum(nCells(1:a-1));
-    end
-    %loop through stimuli after baseline
-    for k = 1:length(rogers2024.stimuli)
-            counter = zeros(5,nCells(a));
-            for c=1:nCells(a)
-                for m=1:8
-                    counter(m,c) = ismember(c,sigCells{a,m,k}{1});
-                    
-                end
+    %loop through stimuli
+    for k = 1:length(stimuli)
+        counter = zeros(rogers2024.trialStructure.nSessions, nCells(a));
+        for c=1:nCells(a)
+            for m=1:rogers2024.trialStructure.nSessions
+                counter(m,c) = ismember(c, sigCells{a,m,k}{1});           
             end
-            
-            for m=1:8
-                frac(a,m,k) = length(find(sum(counter)==m))./nCells(a);
-            end
+        end
+        
+        for m=1:rogers2024.trialStructure.nSessions
+            frac(a,m,k) = sum(sum(counter)==m) ./ nCells(a);
+        end
     end
-         disp(a)
+    disp(a)
  end
     
 
 %plot
-for s=1:3
-    labels{s} = strcat('Fraction  ',rogers2024.stimuli(s+1).name,'-responsive');
-end
-
-plotPersist(frac,groupIDs,groupNames,labels(1),labels)
+plotPersist(frac, {rogers2024.groups.members}, {rogers2024.groups.name}, {'tone', 'trace', 'tone+trace', 'shock'})
 
 %% 7. Measure the freezing encoding of single neurons. For fig 2P-Q, Supp Fig. 2B
 %Representative image is animal g=10, session=3
 
 %initialize storage matrix for the fraction of neurons and average freezing
 %encoding
-freezeCells = zeros(nSesh,nAnimals);
-AUCsMean = zeros(nSesh,nAnimals);
-
-delay = 30; %offset between miniscope and freezing recording (seconds)
-dt = 15; %sampling rate of freezing (Hz)
 
 %loop through animals
-for g = 1:25
-    
+for a = 1:length(rogers2024.animals)
     %loop through sessions
-    for h = 3%1:nSesh
+    for m = 1:rogers2024.trialStructure.nSessions
+        data = lr{a,m};    % downsampled traces
+        %remove temporal offset between miniscope and freezing recording (seconds), z-score over the session
+        ac = zscore(data(rogers2024.trialStructure.recordingOffset * downSamplingRate:end, :));
         
-        %initialize temporary storage counter and vector
-        numCells = 0;
-        AUCtot = [];
-        
-        data = lr{g,h};    % downsampled traces
-        ac = zscore(data(delay*15:end,:)); %remove temporal offset of recordings, z-score over the session
-        
-        freezing = table2array(rogers2024.animals(g).sessions(h).freezing);      %loop through freezing
+        freezing = table2array(rogers2024.animals(a).sessions(m).freezing);      %loop through freezing
         freezing(freezing==100) = 1;  %turn into binary
         
-        if length(freezing)>length(ac)  %make matrices the same length
-            freezing = freezing(1:length(ac(:,1)));
+        if length(freezing) > size(ac, 1)  %make matrices the same length
+            freezing = freezing(1:size(ac, 1));
         else
-            ac = ac(1:length(freezing),:);
+            ac = ac(1:length(freezing), :);
         end
         
         %initialize storage vectors for auROC and cell indices for auROC > .6
         AUCs = [];
-        posCells = [];
+        freezeEncoding{a,m} = [];
         
-        %loop through neuronsΩç
-        for m=1:length(ac(1,:))
-                act = ac(:,m);
-                
-                %create shuffle vector
-                randN = randperm(round(length(freezing)));
-                
-                %pick random 50% of activity freezing values for training
-                %set
-                trainAct = act(randN(1:round(length(randN)/2)),:);
-                trainFreeze = freezing(randN(1:round(length(randN)/2)),:);
-                
-                %pick random 50% of activity freezing values for test
-                %set
-                testAct = act(randN(round(length(randN)/2)+1:end),:);
-                testFreeze = freezing(randN(round(length(randN)/2)+1:end),1);
-                
-                %train logistic regressor
-                [B,DEV,STATS] = glmfit(trainAct,trainFreeze,'binomial','Link','logit');
-                
-                %test
-                pred = glmval(B,testAct,'logit');
-                
-                %calculate auROC
-                [X,Y,T,AUC] = perfcurve(testFreeze,pred,1, 'XCrit','FPR','YCrit','TPR');
-                
-                %record auROC
-                AUCs = [AUCs AUC];
-               
-                if STATS.p(2)<0.0001
-                    
-                    %count cells with auROC > 0.6
-                    numCells = numCells+1;
-                    
-                    %record their index
-                    posCells = [posCells m];
-
-                end
+        %loop through neurons
+        for c=1:size(ac, 2)                
+            %create shuffle vector
+            randN = randperm(round(length(freezing)));
             
-            freezeEncoding{g,h} = posCells;
+            %pick random 50% of activity freezing values for training
+            %set
+            trainAct = ac(randN(1:round(end / 2)), c);
+            trainFreeze = freezing(randN(1:round(end / 2)));
+            
+            %pick random 50% of activity freezing values for test
+            %set
+            testAct = ac(randN(round(end / 2) + 1:end), c);
+            testFreeze = freezing(randN(round(end / 2) + 1:end));
+            
+            %train logistic regressor
+            [B, ~, STATS] = glmfit(trainAct, trainFreeze, 'binomial', 'Link', 'logit');
+            
+            %test
+            pred = glmval(B, testAct, 'logit');
+            
+            %calculate auROC
+            [~, ~, ~, AUCs(c)] = perfcurve(testFreeze, pred, 1, 'XCrit', 'FPR', 'YCrit', 'TPR');
+           
+            if STATS.p(2)<0.0001   
+                %record their index
+                freezeEncoding{a,m} = [freezeEncoding{a,m}, c];
+            end
         end
         
         %record average auROC of animal in session
-        AUCsMean(h,g) = mean(AUCs);
+        AUCsMean(m,a) = mean(AUCs);
         
-        %record fraction of freezing encoding neurons
-        freezeCells(h,g) = length(posCells)/nCells(g);
-        ac(isnan(ac)) = 0;
-        c = palette('scheme',2);
-        
-       
-        [B,I] = sort(AUCs);
-        cofI = I(ismember(I,posCells))';
-        %[B,I] = sort(mean(zscore(ac(132+1141:194+1141,cofI))));
-        
-        %Uncomment for representative image
-%         figure
-%         subplot(211)
-%         heatmap(freezing(1241:1440)')
-%         grid off
-%         subplot(212)
-%         if nCells(g)<50
-%             f=nCells(g)-1;
-%         else
-%             f=49;
-%         end
-%         heatmap(zscore(ac(1241:1440,cofI))','colorlimits',[-2 2])
-%         colormap(c)
-%         grid off
-
+        % ac(isnan(ac)) = 0;        
+        % 
+        % [~, I] = sort(AUCs);
+        % cofI = I(ismember(I, freezeEncoding{a,m}))';
+        % 
+        % %Uncomment for representative image
+        % figure
+        % subplot(211)
+        % heatmap(freezing(1241:1440)')
+        % grid off
+        % subplot(212)
+        % heatmap(zscore(ac(1241:1440, cofI))', 'colorlimits', [-2 2])
+        % colormap(hot)
+        % grid off
     end
-    
-
-  disp(g)
-    
+  disp(a)
 end
 
 %plot
-for a = 1:nAnimals
+for a = 1:length(rogers2024.animals)
     blPop = freezeEncoding{a,1};
-    for m=2:nSesh
+    for m=2:rogers2024.trialStructure.nSessions
         pop = freezeEncoding{a,m};
-        pop(ismember(pop,blPop)) = [];
-        fearEncoding{a,m} = pop;
-        freezeFrac(m-1,a) = length(pop)/nCells(a);
+        pop(ismember(pop, blPop)) = [];
+        freezeFrac(m-1,a) = length(pop) / nCells(a);
     end
 end
-ylab1 = {'Mean freezing encoding'};
-ylab2 = {'Fraction of Cells'};
-ylim1 = [.5 .7];
-ylim2 = [0 .7];
 
-plot2metrics(AUCsMean,freezeFrac,sessionNames,groupNames,groupIDs,ylab1,ylab2,ylim1,ylim2)
+plot2metrics( ...
+    AUCsMean, ...
+    freezeFrac, ...
+    {rogers2024.sessions.name}, ...
+    {rogers2024.groups.name}, ...
+    {rogers2024.groups.members}, ...
+    'Mean freezing encoding', ...
+    'Fraction of Cells', ...
+    [.5 .7], ...
+    [0 .7] ...
+)
 %% 8. Extract freezing and align to stimuli
 %calculate tensors from Williams et al. TCA code (https://github.com/ahwillia/tensortools)
 % load tensors 
 
 %get trial by trial freezing
-freezingInTrials = {};
-dt = 15;
-timesF = cell(5,1);
 %get standard stimulus times
-for m=1:nSesh
-    timesF{m,1} = rogers2024.animals(24).sessions(m).stimulusTimes-videoOffset;
+for m=1:rogers2024.trialStructure.nSessions
+    timesF{m} = rogers2024.animals(24).sessions(m).stimulusTimes - rogers2024.trialStructure.recordingOffset;
 end
 
 %create second by second % freezing
-for n=1:25%nAnimals
-    fr = cell(nSesh,1);
-    for m=1:nSesh
+for a=1:length(rogers2024.animals)
+    for m=1:rogers2024.trialStructure.nSessions
         %read each animal's binary freezing data from each session
-         fz = table2array(rogers2024.animals(n).sessions(m).freezing);
-         fr{m} = fz;
-         
-         %downsample to 1 second by thresholding (if freezing is greater
-         %than 50% in that second
-         fzH = zeros(round(length(fz)/dt)-1,1);
-        for t=1:round(length(fz)/dt)-1
-            
-            val = mean(fz((t-1)*dt+1:t*dt));
+        fr{m} = table2array(rogers2024.animals(a).sessions(m).freezing);
+        
+        %downsample to 1 second by thresholding (if freezing is greater
+        %than 50% in that second
+        fzH = [];
+        for ii=1:round(length(fr{m}) / downSamplingRate) - 1
+            val = mean(fr{m}((ii - 1) * downSamplingRate + 1:ii * downSamplingRate));
             if val>=50
-                fzH(t) = 1;
+                fzH(ii) = 1;
             else
-                fzH(t) = 0;
+                fzH(ii) = 0;
             end
-            
         end
         
         %get that animal's stimulus times
-        stimTimes = rogers2024.animals(n).sessions(m).stimulusTimes;
-        offset = stimTimes(1)-videoOffset;
-        fzHs = [];
-        for s =1:length(stimTimes)
-            fzHs = [fzHs; fzH(stimTimes(s)-offset-10:stimTimes(s)-offset+49)];
+        for t=1:length(rogers2024.animals(a).sessions(m).stimulusTimes)
+            % 这好像不对
+            stimTime = round( ...
+                rogers2024.animals(a).sessions(m).stimulusTimes(t) - rogers2024.animals(a).sessions(m).stimulusTimes(1) + rogers2024.trialStructure.recordingOffset ...
+            );
+            fzHz{a,m}{t} = fzH(stimTime - rogers2024.trialStructure.trialStart:stimTime + rogers2024.trialStructure.trialEnd);
         end
-        fzHz{n,m} = fzHs;
+        fzHz{a,m} = [fzHz{a,m}{:}];
     end
 
     %fix broken video
-    if n==5
-        timesf = timesF;
-        timesf{3,1} = [120; 120+round(2844/15); 234+round(2844/15); 331+round(2844/15); 441+round(2844/15); 543+round(2844/15)];
-    else
-        timesf = timesF;
+    timesf = timesF;
+    if a==5
+        timesf{3} = [120; 120+round(2844/15); 234+round(2844/15); 331+round(2844/15); 441+round(2844/15); 543+round(2844/15)];
     end
     
     %align freezing to stimulus times
-    fIT = aligntraces(fr,timesf,nSesh,dt,start,fin);
-    freezingInTrials = [freezingInTrials fIT];
+    freezingInTrials{a} = aligntraces( ...
+        fr, ...
+        timesf, ...
+        rogers2024.trialStructure.nSessions, ...
+        downSamplingRate, ...
+        rogers2024.trialStructure.trialStart, ...
+        rogers2024.trialStructure.trialEnd ...
+    );
 end
 
 
 %take freezing 10 seconds before each tone to 50 seconds after on each
 %trial and concatenate
-for n=1:25%nAnimals
-    a=0;
-    for m=1:nSesh
-        fre = freezingInTrials{m,n};
-
-        for t = 1:length(sessions{m})
-           a=a+1;
-           freTot(a,n) = mean(fre(trialLength*(t-1)+1:trialLength*t));
-        end
-
+for a=1:length(rogers2024.animals)
+    for t = 1:rogers2024.trialStructure.nTrialsTotal
+       freTot(t, a) = mean(freezingInTrials{a}(trialLength * (t - 1) + 1:trialLength * t));
     end
 end
 
@@ -618,163 +473,119 @@ end
 
 nDims = 5;
 
-coefs = zeros(nAnimals,nDims);
 %to plot representative TCAs, uncomment the figure file in the for-loop -
 %the representative image in the paper is from animal 12
 
-for a=1:25
-    
-    fr = freTot(:,a);
-    if a<22 
-    tt = table2array(rogers2024.animals(a).tca);
-    timeFactor = tt(2:61,:);
-    neuronFactor = tt(62:end-34,:);
-    trialFactor = tt(end-33:end,:);
-    elseif ismember(a,22:25)
-        tt = table2array(rogers2024.animals(a).tca(:,2:end));
-        timeFactor = tt(1:60,:);
-        neuronFactor = tt(61:end-34,:);
-        trialFactor = tt(end-33:end,:);
+for a=1:length(rogers2024.animals)
+    if a < 22 || a > 25
+        tca = table2array(rogers2024.animals(a).tca(2:end, :));
+    else
+        tca = table2array(rogers2024.animals(a).tca(:, 2:end));
     end
-    
     %store neuron factors - used in Fig. 3G, 4-5
-    neuFac{a,1} = neuronFactor;
-    timFac{a,1} = timeFactor;
-    triFac{a,1} = trialFactor;
+    timFac{a} = tca(1:trialLength,:);
+    neuFac{a} = tca(trialLength + 1:end - rogers2024.trialStructure.nTrialsTotal, :);
+    triFac{a} = tca(end - rogers2024.trialStructure.nTrialsTotal + 1:end, :);
     
     %Identify session-dominant factors - used in Fig. 3D-F, 4, 5
-    for n=1:nSesh
-        facLoads = mean(trialFactor(sessions{n},:));
-        domFacs(a,n) = find(facLoads==max(facLoads));
+    for m=1:rogers2024.trialStructure.nSessions
+        facLoads = mean(triFac{a}(rogers2024.sessions(m).trials, :));
+        [~, domFacs(a,m)] = max(facLoads);
     end
     
     %calculate strength of each factor in each session - used in Fig. D,E
-    for n=1:nSesh
-        facLoads = mean(trialFactor(sessions{n},:));
-        
-        %for m=1:nDims
-            strength(a,n) = facLoads(domFacs(a,n))/sum(facLoads(domFacs(a,:)));
-           
-        %end
+    for m=1:rogers2024.trialStructure.nSessions
+        facLoads = mean(triFac{a}(rogers2024.sessions(m).trials, :));
+        % 这好像不对
+        strength(a,m) = facLoads(domFacs(a,m))/sum(facLoads(domFacs(a,:)));
     end
-    
-    %calculate correlation of trial factor loadings with trial-by-trial
-    %freezing over extinction with multiple linear regression. save stats
-    [b, bint, r, rint,stats] = regress(fr, [trialFactor ones(nTrials,1)]);
-    coefs(a,:) = b(2:6);
-    R2(a,:) = stats(1); 
-    fs(a,:) = stats(2); 
-    ps(a,:) = stats(3); 
 
     %uncomment to plot representative figure
-    %plotTCAmodel(timeFactor,neuronFactor,trialFactor,fr)
+    %plotTCAmodel(timFac{a}, neuFac{a}, triFac{a}, freTot(:,a))
 end
-%%
-r=zeros(5);
-p=zeros(5);
-for m=1:5
-    for n=1:5
-        [r(n,m),p(n,m)] = corr(mean(freTot(sessions{n},1:25))',strength(1:25,m));
+
+for m=1:rogers2024.trialStructure.nSessions
+    for n=1:rogers2024.trialStructure.nSessions
+        [r(n,m), p(n,m)] = corr(mean(freTot(rogers2024.sessions(n).trials, :))', strength(:, m));
     end
 end
 r(p>0.05) = 0;
 figure
-c = palette('scheme',4);
-s=sign(r);
-heatmap((r))
-colormap(c)
+heatmap(r)
+colormap(hot)
 
 %% 10. Plot normalized trial factors. for Supp Fig. 4A-E
 
-%initialize trial weight storage vectors
-normTrialWeights = zeros(nTrials, nAnimals, nSesh);
-
-for n=1:25%nAnimals
-    
-    
-    %call trial weights from a given animal
-    tWeights = triFac{n};
-    
+for a=1:length(rogers2024.animals)
+    %call trial weights from a given animal    
     %store normalized trial weights
-    for m=1:nSesh
-        normTrialWeights(:,n,m) = tWeights(:,domFacs(n,m))./max(tWeights(:,domFacs(n,m)));
-       
-        facLoads = mean(normTrialWeights(sessions{m},n,:));
-        
-        for m=1:nDims
-            strength(n,m) = facLoads(domFacs(n,m))/sum(facLoads(domFacs(n,:)));
-           
-        end
-   
+    for m=1:rogers2024.trialStructure.nSessions
+        normTrialWeights(:,a,m) = triFac{a}(:,domFacs(a,m)) ./ max(triFac{a}(:,domFacs(a,m)));
     end
-    
 end
 
 %plot
-ys = [0 1];% {'Hab-Dom','Acq-Dom','Ext1-Dom','Ext2-Dom','Ext3-Dom'};
-colors = {[.5 .5 .5],'k','c','r'};
+colors = {[.5 .5 .5],'k','r','g','b'};
 figure
-for n=1:nSesh
-subplot(5,1,n)
-    for m=1:nGroups
-        data=normTrialWeights(:,rogers2024.groups(m).members,n);
-        plot(1:length(data),mean(data,2),'color',colors{m},'Linewidth',1)
-        dat=data;
+for m=1:rogers2024.trialStructure.nSessions
+    subplot(5, 1, m)
+    for g=1:length(rogers2024.groups)
+        data=normTrialWeights(:, rogers2024.groups(g).members, m);
+        plot(1:rogers2024.trialStructure.nTrialsTotal, mean(data,2), 'color', colors{g}, 'Linewidth', 1)
         hold on
-        y_upper = mean(dat,2)+std(dat,[],2)./sqrt(size(dat,2));
-        y_lower = mean(dat,2)-std(dat,[],2)./sqrt(size(dat,2));
-        fill([1:size(dat, 1), fliplr(1:size(dat, 1))], [y_upper; flipud(y_lower)], colors{m}, 'FaceAlpha', 0.2, 'EdgeColor', 'none');
+        y_upper = mean(data, 2) + std(data, [], 2) ./ sqrt(size(data, 2));
+        y_lower = mean(data, 2) - std(data, [], 2) ./ sqrt(size(data, 2));
+        fill( ...
+            [1:rogers2024.trialStructure.nTrialsTotal, fliplr(1:rogers2024.trialStructure.nTrialsTotal)], ...
+            [y_upper; flipud(y_lower)], ...
+            colors{g}, ...
+            'FaceAlpha', 0.2, ...
+            'EdgeColor', 'none' ...
+        );
         hold on
     end
-    ylim([ys])
-    %ylabel('Normalized trial weights')
-    %xlabel('Time')
-    %title(strcat(sessionNames{n},'-Dominant Component'))
-    %if n==5
-    %    legend(groupNames)
-    %end
+    ylim([0, 1])
+    % ylabel('Normalized trial weights')
+    % xlabel('Time')
+    % title(strcat(rogers2024.sessions(n).name,'-Dominant Component'))
+    % if m==5
+    %    legend({rogers2024.groups.name})
+    % end
 end
 
 
 %% 11. Plot normalized temporal factors. for Supp Fig. 3F-J
-%initialize trial weight storage vectors
-normTrialWeights = zeros(nTrials, nAnimals, nSesh);
 
-for n=1:25%nAnimals
-    
-    %call trial weights from a given animal
-    tWeights = timFac{n};
-    
+for a=1:length(rogers2024.animals)
+    %call trial weights from a given animal    
     %store normalized trial weights
-    for m=1:nSesh
-        normTempWeights(:,n,m) = tWeights(:,domFacs(n,m))./max(tWeights(:,domFacs(n,m)));
+    for m=1:rogers2024.trialStructure.nSessions
+        normTempWeights(:,a,m) = timFac{a}(:, domFacs(a,m)) ./ max(timFac{a}(:, domFacs(a,m)));
     end
     
 end
 
 %plot
-ys = [0 1];% {'Hab-Dom','Acq-Dom','Ext1-Dom','Ext2-Dom','Ext3-Dom'};
-colors = {[.5 .5 .5],'k','c','r'};
+colors = {[.5 .5 .5],'k','r','g','b'};
 figure
-for n=1:nSesh
-subplot(1,5,n)
-    for m=1:nGroups
-        data=normTempWeights(:,rogers2024.groups(m).members,n);
-        plot(1:length(data),mean(data,2),'color',colors{m},'Linewidth',1)
+for m=1:rogers2024.trialStructure.nSessions
+    subplot(5, 1, m)
+    for g=1:length(rogers2024.groups)
+        data=normTempWeights(:, rogers2024.groups(g).members, m);
+        plot(1:trialLength, mean(data,2), 'color', colors{g}, 'Linewidth', 1)
         hold on
-        dat=data;
-        y_upper = mean(dat,2)+std(dat,[],2)./sqrt(size(dat,2));
-        y_lower = mean(dat,2)-std(dat,[],2)./sqrt(size(dat,2));
-        fill([1:size(dat, 1), fliplr(1:size(dat, 1))], [y_upper; flipud(y_lower)], colors{m}, 'FaceAlpha', 0.2, 'EdgeColor', 'none');
+        y_upper = mean(data, 2) + std(data, [], 2) ./ sqrt(size(data, 2));
+        y_lower = mean(data, 2) - std(data, [], 2) ./ sqrt(size(data, 2));
+        fill([1:trialLength, fliplr(1:trialLength)], [y_upper; flipud(y_lower)], colors{g}, 'FaceAlpha', 0.2, 'EdgeColor', 'none');
         hold on
     end
-    ylim([ys])
-%     ylabel('Normalized trial weights')
-%     xlabel('Time')
-%     title(strcat(rogers2024.sessions(n).name,'-Dominant Component'))
-%     if n==5
-%         legend(groupNames{1},groupNames{2},groupNames{3},groupNames{4})
-%     end
+    ylim([0, 1])
+    % ylabel('Normalized trial weights')
+    % xlabel('Time')
+    % title(strcat(rogers2024.sessions(n).name,'-Dominant Component'))
+    % if m==5
+    %     legend(rogers2024.groups.name)
+    % end
 end
 
 %% 12. Assess cumulative distribution of neuron weights. for Fig. 4G,H
@@ -786,14 +597,14 @@ threshold = linspace(0,10,11);
 %Ext3-dominant ensembles
 nComps = 3;
 comps = [2 3 5];
-cellsInComp = zeros(nAnimals, length(threshold),nComps);
+cellsInComp = zeros(length(rogers2024.animals), length(threshold),nComps);
 
 for t = 1:length(threshold)
     aCells = [];
     e1Cells = [];
     e3Cells = [];
     
-    for n = 1:25%nAnimals
+    for n = 1:length(rogers2024.animals)
         
         %call neuron factor weights from animal
         weights = neuFac{n};
@@ -828,7 +639,7 @@ colors = {'r','y','c'};
 figure
 for c=1:nComps
     data = cellsInComp(:,:,c);
-    errorbar(threshold,mean(data),std(data)/sqrt(nAnimals-1),colors{c},'Linewidth',3)
+    errorbar(threshold, mean(data), std(data)/sqrt(length(rogers2024.animals)-1), colors{c}, 'Linewidth', 3)
     hold on
 end
 hold on
@@ -855,7 +666,7 @@ nonshock = rogers2024.groups(5).members;
 
 if threshTest == 1
     threshes = table2array(readtable('fMeans.csv'));
-    threshold = [threshes([[15:21] [1:14]]); [1.55; 1.28; 1.7; 0.975]];
+    threshold = [threshes([15:21 1:14]); [1.55; 1.28; 1.7; 0.975]];
     nAnimals = 21;
 end
 
@@ -879,7 +690,7 @@ cNR = [];
 cSS = [];
 cSR = [];
 cNS = [];
-for a = 1:25%1:21%nAnimals
+for a = 1:nAnimals
     if threshTest == 1
         th = threshold(a);
     else
@@ -894,15 +705,15 @@ for a = 1:25%1:21%nAnimals
     
     %load cell indices into their group
     if ismember(a,responders)
-        cR = [cR [1+c:nCells(a)+c]];
+        cR = [cR 1+c:nCells(a)+c];
     elseif ismember(a,nonresponders)
-        cNR = [cNR [1+c:nCells(a)+c]];
+        cNR = [cNR 1+c:nCells(a)+c];
     elseif ismember(a,rapid)
-        cSR = [cSR [1+c:nCells(a)+c]];
+        cSR = [cSR 1+c:nCells(a)+c];
     elseif ismember(a,slow)
-        cSS = [cSS [1+c:nCells(a)+c]];
+        cSS = [cSS 1+c:nCells(a)+c];
     elseif ismember(a,nonshock)
-        cNS = [cNS [1+c:nCells(a)+c]];
+        cNS = [cNS 1+c:nCells(a)+c];
     end
     
     %call neuron factor weights
@@ -1012,11 +823,11 @@ labels2{3} = ['Ext3 Only', 'Acq/Ext3', 'Ext1/Ext3', 'Acq/Ext1/Ext3'];
 nComps=3;
 figure
 for n = 1:nComps
-    for m = 1:nGroups
+    for m = 1:length(rogers2024.groups)
         subplot(3,4,m+4*(n-1))
-        barWithError([1:4],ensOverlap(rogers2024.groups(m).members,:,n),1)
+        barWithError(1:4, ensOverlap(rogers2024.groups(m).members,:,n), 1)
         ylabel('Fraction of Cells')
-        xticks([1:4])
+        xticks(1:4)
         xticklabels(labels2{n})
         ylabel(labels{n})
         ylim([0 .8])
@@ -1035,16 +846,16 @@ end
 % 
 % poolMat = [];
 % 
-% for n=1:nAnimals
+% for n=1:length(rogers2024.animals)
 %     poolMat = [poolMat reshape(tensors{n},60*34,nCells(n))];
 % end
 
 %define time windows
-timeHab = [1:trialLength*max(hab)];
-timeAcq = [trialLength*max(hab)+1:trialLength*max(acq)];
-timeExt1 = [trialLength*max(acq)+1:trialLength*max(ext1)];
-timeExt2 = [trialLength*max(ext1)+1:trialLength*max(ext2)];
-timeExt3 = [trialLength*max(ext2)+1:trialLength*max(ext3)];
+timeHab = 1:trialLength*max(rogers2024.sessions(1).trials);
+timeAcq = trialLength*max(rogers2024.sessions(1).trials)+1:trialLength*max(rogers2024.sessions(2).trials);
+timeExt1 = trialLength*max(rogers2024.sessions(2).trials)+1:trialLength*max(rogers2024.sessions(3).trials);
+timeExt2 = trialLength*max(rogers2024.sessions(3).trials)+1:trialLength*max(rogers2024.sessions(4).trials);
+timeExt3 = trialLength*max(rogers2024.sessions(4).trials)+1:trialLength*max(rogers2024.sessions(5).trials);
 
 %normalize activity to acquisition
 poolMat = (poolMat-mean(poolMat(481:960,:)))./std(poolMat(481:960,:));
@@ -1059,19 +870,19 @@ ens = fieldnames(ensAns(1));
 %interest
 sess = 'Ex1'; %set to Acq, Ex1, or Ex3
 
-if sess == 'Ex1'
+if strcmp(sess, 'Ex1')
     times = timeExt1;
     s=3;
-elseif sess == 'Ex3'
+elseif strcmp(sess, 'Ex3')
     times = timeExt3;
     s=5;
-elseif sess == 'Ex2'
+elseif strcmp(sess, 'Ex2')
     times = timeExt2;
     s=4;
-elseif sess == 'Hab'
+elseif strcmp(sess, 'Hab')
     times = timeHab;
     s=1;
-elseif sess == 'Acq'
+elseif strcmp(sess, 'Acq')
     times = timeAcq;
     s=2;
 end
@@ -1144,7 +955,7 @@ end
 numIt = 100;
 
 %set of comparisons - res vs. nonres, res vs. sal, nonres vs. sal
-comparisons = [0:2];
+comparisons = 0:2;
 
 %store 100 iterations of the model (rows), for each ensemble plus a round
 %where every ensemble is a predictor (columns), for each comparison
@@ -1162,28 +973,22 @@ for f=3
         
         if l==11
             ensActs1 = [];
-            mL = min(lens(g1,sOI(s),l,f));
             for a=1:length(g1)
                 set = sepActs{g1(a),l,f,sOI(s)};
                 ensActs1 = [ensActs1 set];
             end
             
             ensActs2 = [];
-            mL = min(lens(g2,sOI(s),l,f));
             for a=1:length(g2)
                 set = sepActs{g2(a),l,f,sOI(s)};
                 ensActs2 = [ensActs2 set];
             end
             
             ensActs3 = [];
-            mL = min(lens(g3,sOI(s),l,f));
             for a=1:length(g3)
                 set = sepActs{g3(a),l,f,sOI(s)};
                 ensActs3 = [ensActs3 set];
-            end
-            
-            mL = min([length(ensActs1) length(ensActs2) length(ensActs3)]);
-  
+            end  
         
             mL = min([length(ensActs1) length(ensActs2) length(ensActs3)]);
   
@@ -1269,11 +1074,11 @@ tits = {'Decoding between responders and nonresponders during Ext3','Decoding be
 figure; 
 for c=1:3
     subplot(3,1,c)
-barWithError([1:10],squeeze(accuracy(:,1:10,2,c,1,2)),0.5)
+barWithError(1:10, squeeze(accuracy(:,1:10,2,c,1,2)), 0.5)
 hold on
-barWithError([1:10],squeeze(accuracy(:,1:10,1,c,1,2)),0.5)
+barWithError(1:10, squeeze(accuracy(:,1:10,1,c,1,2)), 0.5)
 hold on
-barWithError([1:10],squeeze(accuracy(:,1:10,3,c,1,2)),0.5)
+barWithError(1:10, squeeze(accuracy(:,1:10,3,c,1,2)), 0.5)
 hold on
 ylim([.5,1])
 legend({'Motion','','Freezing'})
@@ -1287,11 +1092,11 @@ tits = {'Decoding between responders and nonresponders during Ext1','Decoding be
 figure; 
 for c=1:3
     subplot(3,1,c)
-barWithError([1:10],squeeze(accuracy(:,1:10,2,c,1,1)),0.5)
+barWithError(1:10, squeeze(accuracy(:,1:10,2,c,1,1)), 0.5)
 hold on
-barWithError([1:10],squeeze(accuracy(:,1:10,1,c,1,1)),0.5)
+barWithError(1:10, squeeze(accuracy(:,1:10,1,c,1,1)), 0.5)
 hold on
-barWithError([1:10],squeeze(accuracy(:,1:10,3,c,1,1)),0.5)
+barWithError(1:10, squeeze(accuracy(:,1:10,3,c,1,1)), 0.5)
 hold on
 ylim([.5,1])
 legend({'Motion','','Freezing'})
@@ -1327,8 +1132,8 @@ for n = 1:25
              idx1 = (fzHz{n,3}==1);
              idx2 = (fzHz{n,5}==1);
          else
-             idx1 = [1:360];
-             idx2 = [1:360];
+             idx1 = 1:360;
+             idx2 = 1:360;
          end
         x =  [mean(poolMat(timeExt1(idx1),cellPop))' mean(poolMat(timeExt3(idx2),cellPop))']; % fzHz{n,5}==0)
         
@@ -1370,7 +1175,7 @@ for n=1:4
     end
 
 end
-sOI=[1:10];
+sOI=1:10;
 titles = {'Acq','Ext1','Ext3','Acq-Only','Ext1-Only','Ext3-Only','Acq/Ext1','Acq/Ext3','Ext1/Ext3','Acq/Ext1/Ext3'};
 col = {[.5 .5 .5],'k', 'c','r'};%,
 grOI = [1 2 3 4];
@@ -1381,12 +1186,12 @@ for g=1:4
     if size(changedActivity{sOI(l),grOI(g),d},1)<2
         continue
     else
-        errorbar([1:2],mean(changedActivity{sOI(l),grOI(g)}),std(changedActivity{sOI(l),grOI(g)})./(sqrt(length(changedActivity{sOI(l),grOI(g)}))-1),'Linewidth',3,'Color',col{g})
+        errorbar(1:2, mean(changedActivity{sOI(l),grOI(g)}), std(changedActivity{sOI(l),grOI(g)})./(sqrt(length(changedActivity{sOI(l),grOI(g)}))-1), 'Linewidth', 3, 'Color', col{g})
     end
 hold on
 end
 xlim([0 3])
-xticks([1:2])
+xticks(1:2)
 xticklabels({'Ext1','Ext3'})
 title(titles{sOI(l)})
 ylabel('Change in Activity (zscore)')
@@ -1490,7 +1295,7 @@ end
 titles={'AcqOnly','Ext1Only','Ext3Only','Acq/Ext1','Acq/Ext3','Ext1/Ext3','Acq/Ext1/Ext3'};
 sOI = [2 3 5];
 for m=1:3
-tim = sessions{sOI(m)};
+tim = rogers2024.sessions(sOI(m)).trials;
 figure
 for n=1:7
 fH = timFac{an}(:,domFacs(an,1)).*weights(neu(n),domFacs(an,1)).*mean(triFac{an}(tim,domFacs(an,1)));
@@ -1512,7 +1317,7 @@ ylim([-.1 1.1])
 legend('Reconstructed','Real')
 title(titles{n})
 
-[rRec(n,m),pRec(n,m)] = corr(dat,dat1);
+[rRec(n,m), pRec(n,m)] = corr(dat,dat1);
 pRec(pRec>.05) = 0;
 %rRec(pRec==0) = 0;
 end

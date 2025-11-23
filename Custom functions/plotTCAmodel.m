@@ -1,6 +1,5 @@
 function [] = plotTCAmodel(timeFactor,neuronFactor,trialFactor,colorCode)
-
-[B,I] = sort(neuronFactor(:,1));
+[~,I] = sort(neuronFactor(:,1));
 nDims = size(neuronFactor,2);
 nTrials = size(trialFactor,1);
 figure
@@ -18,7 +17,7 @@ for n=1:nDims
     bar(neus(I),'c')
 
     subplot(nDims,3,3+(n-1)*3)
-    scatter([1:nTrials],trialFactor(:,n),50,colorCode,'filled')
+    scatter(1:nTrials, trialFactor(:,n), 50, colorCode, 'filled')
     hold on
     xline(8)
     hold on
@@ -27,7 +26,5 @@ for n=1:nDims
     xline(22)
     hold on
     xline(28)
-
-
 end
 end

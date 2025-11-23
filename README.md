@@ -1,3 +1,7 @@
+# This is a permanent fork.
+
+There is no plan for pr, so this is a permanent fork of git@github.com:sarogers9/Rogers_et_al_2024.git. This repo fixes some bug. This does not mean the original code base and paper are wrong. The author does some "trials and errors" in the script and did not (un)comment or modify everything back to make the script run smoothly. This repo also makes the code more readable and tidy.
+
 # Rogers_et_al_2024
 Original data processing pipeline for all data (raw dF/F traces, TCA model outputs) presented in Figures 2-8 and Supp Figures 2-7 Rogers et al 2024. Wrapper, custom functions, and data files.
 

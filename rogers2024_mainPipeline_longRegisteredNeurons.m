@@ -593,60 +593,31 @@ end
 % set threshold range
 threshold = linspace(0,10,11);
 
-%define storage vectors for fraction of cells included in Acq-, Ext1-, and
-%Ext3-dominant ensembles
-nComps = 3;
-comps = [2 3 5];
-cellsInComp = zeros(length(rogers2024.animals), length(threshold),nComps);
+%define storage vectors for fraction of cells included in Hab-, Acq-, Ext1-, Ext2-, and Ext3-dominant ensembles
+cellsInComp = zeros(length(rogers2024.animals), length(threshold), rogers2024.trialStructure.nSessions);
 
 for t = 1:length(threshold)
-    aCells = [];
-    e1Cells = [];
-    e3Cells = [];
-    
-    for n = 1:length(rogers2024.animals)
-        
-        %call neuron factor weights from animal
-        weights = neuFac{n};
-        
-        for c = 1:nComps
-        %calculate fractions of neurons with w > threshold and store
-            cellsInComp(n,t,c) = length(find(weights(:,domFacs(n,comps(c)))>threshold(t)))/nCells(n);
+    for a = 1:length(rogers2024.animals)
+        for m=1:rogers2024.trialStructure.nSessions
+            %calculate fractions of neurons with w > threshold and store
+            cellsInComp(a,t,m) = sum(neuFac{a}(:, domFacs(a,m)) > threshold(t)) / nCells(a);
         end
-        
-        %record ensembles at each threshold
-        if n == 1
-            c = 0;
-        else
-            c = sum(nCells(1:n-1));
-        end
-    
-        aCells = [aCells; find(weights(:,domFacs(n,2))>threshold(t))+c];
-        e1Cells = [e1Cells; find(weights(:,domFacs(n,3))>threshold(t))+c];
-        e3Cells = [e3Cells; find(weights(:,domFacs(n,5))>threshold(t))+c];
-
     end
-    
-    %collect all the cells in the Acq, Ext1, and Ext3 ensembles at the 
-    %predetermined varying thresholds
-    collection{t,1} = aCells;
-    collection{t,2} = e1Cells;
-    collection{t,3} = e3Cells;
 end
 
 %plot
-colors = {'r','y','c'};
+colors = {'r', 'g', 'b', 'y','c'};
 figure
-for c=1:nComps
-    data = cellsInComp(:,:,c);
-    errorbar(threshold, mean(data), std(data)/sqrt(length(rogers2024.animals)-1), colors{c}, 'Linewidth', 3)
+for m=1:rogers2024.trialStructure.nSessions
+    data = cellsInComp(:,:,m);
+    errorbar(threshold, mean(data), std(data) / sqrt(length(rogers2024.animals) - 1), colors{m}, 'Linewidth', 3)
     hold on
 end
 hold on
 xline(1)
 xlabel('Threshold weight')
 ylabel('Fraction of neurons')
-legend({'Acq-Dominant','Ext1-Dominant','Ext3-Dominant'})
+legend({'Hab-Dominant', 'Acq-Dominant', 'Ext1-Dominant', 'Ext2-Dominant', 'Ext3-Dominant'})
 title('Choosing dominant neurons')
 
 
@@ -655,66 +626,20 @@ title('Choosing dominant neurons')
 %set threshTest to 0 if reproducing main figs. set threshTest to 1 if
 %reproducing Supp Fig 6. note that null thresholds were not determined for
 %non-shock mice
-threshTest = 0;
 
-%define groups
-responders = rogers2024.groups(3).members;
-nonresponders = rogers2024.groups(4).members;
-rapid = rogers2024.groups(1).members;
-slow = rogers2024.groups(2).members;
-nonshock = rogers2024.groups(5).members;
-
-if threshTest == 1
-    threshes = table2array(readtable('fMeans.csv'));
-    threshold = [threshes([15:21 1:14]); [1.55; 1.28; 1.7; 0.975]];
-    nAnimals = 21;
-end
-
-%create storage vectors for all Acq-, Ext1-, and Ext3-dominant cells
-acqDomCells = [];
-ext1DomCells = [];
-ext3DomCells = [];
-
-%create storage vectors for their overlaps
-acqOnly = [];
-ext1Only = [];
-ext3Only = [];
-acqExt1 = [];
-acqExt3 = [];
-ext1Ext3 = [];
-acqExt1Ext3 = [];
+ensOverlap = zeros(length(rogers2024.animals), length(labels2{1}), length(labels));
+labels = {'Overlap with Acq-Dom Neurons', 'Overlap with Ext1-Dom Neurons', 'Overlap with Ext3-Dom Neurons'};
+labels2 = {
+    ['Acq Only', 'Acq/Ext1', 'Acq/Ext3', 'Acq/Ext1/Ext3'], ...
+    ['Ext1 Only', 'Acq/Ext1', 'Ext1/Ext3', 'Acq/Ext1/Ext3'], ...
+    ['Ext3 Only', 'Acq/Ext3', 'Ext1/Ext3', 'Acq/Ext1/Ext3']
+};
 
 %allocate vectors to assign cell indices to for each group
-cR = [];
-cNR = [];
-cSS = [];
-cSR = [];
-cNS = [];
-for a = 1:nAnimals
-    if threshTest == 1
-        th = threshold(a);
-    else
-        th=1;
-    end
+for a = 1:length(rogers2024.animals)
+    th=1;
     %number to add to convert within-animal cell index to pooled cell index
-    if a == 1
-        c = 0;
-    else
-        c = sum(nCells(1:a-1));
-    end
-    
-    %load cell indices into their group
-    if ismember(a,responders)
-        cR = [cR 1+c:nCells(a)+c];
-    elseif ismember(a,nonresponders)
-        cNR = [cNR 1+c:nCells(a)+c];
-    elseif ismember(a,rapid)
-        cSR = [cSR 1+c:nCells(a)+c];
-    elseif ismember(a,slow)
-        cSS = [cSS 1+c:nCells(a)+c];
-    elseif ismember(a,nonshock)
-        cNS = [cNS 1+c:nCells(a)+c];
-    end
+    offset = sum(nCells(1:a-1));
     
     %call neuron factor weights
     weights = neuFac{a};
@@ -722,117 +647,59 @@ for a = 1:nAnimals
     %dominant cells are defined by those weights > 1 in the component
     %dominating that session
 
-
-    aCells = find(weights(:,domFacs(a,2))>th);
-    e1Cells = find(weights(:,domFacs(a,3))>th);
-    e3Cells = find(weights(:,domFacs(a,5))>th);
-    
-    weightMat{a,1} = weights(aCells,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,2} = weights(e1Cells,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,3} = weights(e3Cells,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    
-    overlap = aCells(ismember(aCells,e1Cells));
+    for m = 1:rogers2024.trialStructure.nSessions
+        idxCells{m} = find(weights(:,domFacs(a,m)) > th);
+    end
     
     %cells dominating all three sessions
-    ae1e3 = overlap(ismember(overlap,e3Cells));
+    ae1e3 = intersect(intersect(idxCells{2}, idxCells{3}), idxCells{5});
     
     %cells dominating all acq, ext1
-    ae1 = overlap(~ismember(overlap,e3Cells));
+    ae1 = setdiff(intersect(idxCells{2}, idxCells{3}), idxCells{5});
     
-    %cells dominating all acq, ext3
-    overlap = aCells(ismember(aCells,e3Cells));
-    
-    ae3 = overlap(~ismember(overlap,e1Cells));
+    %cells dominating all acq, ext3    
+    ae3 = setdiff(intersect(idxCells{2}, idxCells{5}), idxCells{3});
     
     %cells dominating all ext1, ext3
-    overlap = e1Cells(ismember(e1Cells,e3Cells));
-    mat(a,1) = length(overlap)./nCells(a);
-    e1e3 = overlap(~ismember(overlap,aCells));
+    e1e3 = setdiff(intersect(idxCells{3}, idxCells{5}), idxCells{2});
     
     %cells dominating only acq
-    aOnly = aCells(~ismember(aCells,ae1e3));
-    aOnly = aOnly(~ismember(aOnly,ae1));
-    aOnly = aOnly(~ismember(aOnly,ae3));
+    aOnly = setdiff(setdiff(idxCells{2}, idxCells{3}), idxCells{5});
     
     %cells dominating only ext1
-    e1Only = e1Cells(~ismember(e1Cells,ae1e3));
-    e1Only = e1Only(~ismember(e1Only,ae1));
-    e1Only = e1Only(~ismember(e1Only,e1e3));
+    e1Only = setdiff(setdiff(idxCells{3}, idxCells{2}), idxCells{5});
     
     %cells dominating only ext3
-    e3Only = e3Cells(~ismember(e3Cells,ae1e3));
-    e3Only = e3Only(~ismember(e3Only,e1e3));
-     e3Only = e3Only(~ismember(e3Only,ae3));
+    e3Only = setdiff(setdiff(idxCells{5}, idxCells{2}), idxCells{3});
      
     %store fraction of overlap for individual animals
-    ensOverlap(a,1,1) = length(aOnly)/length(aCells);
-    ensOverlap(a,2,1) = length(ae1)/length(aCells);
-    ensOverlap(a,3,1) = length(ae3)/length(aCells);
-    ensOverlap(a,4,1) = length(ae1e3)/length(aCells);
+    ensOverlap(a,:,1) = [length(aOnly), length(ae1), length(ae3), length(ae1e3)] / length(aCells);
+    ensOverlap(a,:,2) = [length(e1Only), length(ae1), length(e1e3), length(ae1e3)] / length(e1Cells);    
+    ensOverlap(a,:,3) = [length(e3Only), length(ae3), length(e1e3), length(ae1e3)] / length(e3Cells);
     
-    ensOverlap(a,1,2) = length(e1Only)/length(e1Cells);
-    ensOverlap(a,2,2) = length(ae1)/length(e1Cells);
-    ensOverlap(a,3,2) = length(e1e3)/length(e1Cells);
-    ensOverlap(a,4,2) = length(ae1e3)/length(e1Cells);
-    
-    ensOverlap(a,1,3) = length(e3Only)/length(e3Cells);
-    ensOverlap(a,2,3) = length(ae3)/length(e3Cells);
-    ensOverlap(a,3,3) = length(e1e3)/length(e3Cells);
-    ensOverlap(a,4,3) = length(ae1e3)/length(e3Cells);
-    
-    %assign neurons indices for activity pooled across animals and store in
-    %vectors
-    weightMat{a,4} = weights(aOnly,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,5} = weights(e1Only,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,6} = weights(e3Only,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,7} = weights(ae1,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,8} = weights(ae3,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,9} = weights(e1e3,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    weightMat{a,10} = weights(ae1e3,[domFacs(a,1) domFacs(a,2) domFacs(a,3) domFacs(a,4) domFacs(a,5)]);
-    
-    ensAns(a,1).acqcells = aCells+c;
-    ensAns(a,1).ext1cells = e1Cells+c;
-    ensAns(a,1).ext3cells = e3Cells+c;
-    ensAns(a,1).a = aOnly+c;
-    ensAns(a,1).e1 = e1Only+c;
-    ensAns(a,1).e3 = e3Only+c;
-    ensAns(a,1).ae1 = ae1+c;
-    ensAns(a,1).ae3 = ae3+c;
-    ensAns(a,1).e1e3 = e1e3+c;
-    ensAns(a,1).ae1e3 = ae1e3+c;
-    
-    acqDomCells = [acqDomCells; aCells + c];
-    ext1DomCells = [ext1DomCells; e1Cells + c];
-    ext3DomCells = [ext3DomCells; e3Cells + c];
-    
-    acqOnly = [acqOnly; aOnly+c];
-    ext1Only = [ext1Only; e1Only+c];
-    ext3Only = [ext3Only; e3Only+c];
-    acqExt1 = [acqExt1; ae1+c];
-    acqExt3 = [acqExt3; ae3+c];
-    ext1Ext3 = [ext1Ext3; e1e3+c];
-    acqExt1Ext3 = [acqExt1Ext3; ae1e3+c];
+    ensAns(a).acqcells = aCells + offset;
+    ensAns(a).ext1cells = e1Cells + offset;
+    ensAns(a).ext3cells = e3Cells + offset;
+    ensAns(a).a = aOnly + offset;
+    ensAns(a).e1 = e1Only + offset;
+    ensAns(a).e3 = e3Only + offset;
+    ensAns(a).ae1 = ae1 + offset;
+    ensAns(a).ae3 = ae3 + offset;
+    ensAns(a).e1e3 = e1e3 + offset;
+    ensAns(a).ae1e3 = ae1e3 + offset;
 end
-% 
-% 
-labels = {'Overlap with Acq-Dom Neurons','Overlap with Ext1-Dom Neurons','Overlap with Ext3-Dom Neurons'};
-labels2{1} = ['Acq Only', 'Acq/Ext1', 'Acq/Ext3', 'Acq/Ext1/Ext3'];
-labels2{2} = ['Ext1 Only', 'Acq/Ext1', 'Ext1/Ext3', 'Acq/Ext1/Ext3'];
-labels2{3} = ['Ext3 Only', 'Acq/Ext3', 'Ext1/Ext3', 'Acq/Ext1/Ext3'];
 
-nComps=3;
 figure
-for n = 1:nComps
+for n = 1:length(labels)
     for m = 1:length(rogers2024.groups)
-        subplot(3,4,m+4*(n-1))
-        barWithError(1:4, ensOverlap(rogers2024.groups(m).members,:,n), 1)
-        ylabel('Fraction of Cells')
-        xticks(1:4)
+        subplot(length(labels), length(labels2{1}), m + length(labels2{1}) * (n-1))
+        barWithError(1:length(labels2{1}), ensOverlap(rogers2024.groups(m).members, :, n), 1)
+        xticks(1:length(labels2{1}))
         xticklabels(labels2{n})
         ylabel(labels{n})
-        ylim([0 .8])
+        ylim([0, 0.8])
         if n==1
-        title(rogers2024.groups(m).name)
+            title(rogers2024.groups(m).name)
         end
     end
 end

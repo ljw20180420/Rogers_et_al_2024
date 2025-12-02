@@ -627,13 +627,13 @@ title('Choosing dominant neurons')
 %reproducing Supp Fig 6. note that null thresholds were not determined for
 %non-shock mice
 
-ensOverlap = zeros(length(rogers2024.animals), length(labels2{1}), length(labels));
 labels = {'Overlap with Acq-Dom Neurons', 'Overlap with Ext1-Dom Neurons', 'Overlap with Ext3-Dom Neurons'};
 labels2 = {
-    ['Acq Only', 'Acq/Ext1', 'Acq/Ext3', 'Acq/Ext1/Ext3'], ...
-    ['Ext1 Only', 'Acq/Ext1', 'Ext1/Ext3', 'Acq/Ext1/Ext3'], ...
-    ['Ext3 Only', 'Acq/Ext3', 'Ext1/Ext3', 'Acq/Ext1/Ext3']
+    ["Acq Only", "Acq/Ext1", "Acq/Ext3", "Acq/Ext1/Ext3"], ...
+    ["Ext1 Only", "Acq/Ext1", "Ext1/Ext3", "Acq/Ext1/Ext3"], ...
+    ["Ext3 Only", "Acq/Ext3", "Ext1/Ext3", "Acq/Ext1/Ext3"]
 };
+ensOverlap = zeros(length(rogers2024.animals), length(labels2{1}), length(labels));
 
 %allocate vectors to assign cell indices to for each group
 for a = 1:length(rogers2024.animals)
@@ -673,13 +673,13 @@ for a = 1:length(rogers2024.animals)
     e3Only = setdiff(setdiff(idxCells{5}, idxCells{2}), idxCells{3});
      
     %store fraction of overlap for individual animals
-    ensOverlap(a,:,1) = [length(aOnly), length(ae1), length(ae3), length(ae1e3)] / length(aCells);
-    ensOverlap(a,:,2) = [length(e1Only), length(ae1), length(e1e3), length(ae1e3)] / length(e1Cells);    
-    ensOverlap(a,:,3) = [length(e3Only), length(ae3), length(e1e3), length(ae1e3)] / length(e3Cells);
+    ensOverlap(a,:,1) = [length(aOnly), length(ae1), length(ae3), length(ae1e3)] / length(idxCells{2});
+    ensOverlap(a,:,2) = [length(e1Only), length(ae1), length(e1e3), length(ae1e3)] / length(idxCells{3});    
+    ensOverlap(a,:,3) = [length(e3Only), length(ae3), length(e1e3), length(ae1e3)] / length(idxCells{5});
     
-    ensAns(a).acqcells = aCells + offset;
-    ensAns(a).ext1cells = e1Cells + offset;
-    ensAns(a).ext3cells = e3Cells + offset;
+    ensAns(a).acqcells = idxCells{2} + offset;
+    ensAns(a).ext1cells = idxCells{3} + offset;
+    ensAns(a).ext3cells = idxCells{5} + offset;
     ensAns(a).a = aOnly + offset;
     ensAns(a).e1 = e1Only + offset;
     ensAns(a).e3 = e3Only + offset;
@@ -692,8 +692,8 @@ end
 figure
 for n = 1:length(labels)
     for m = 1:length(rogers2024.groups)
-        subplot(length(labels), length(labels2{1}), m + length(labels2{1}) * (n-1))
-        barWithError(1:length(labels2{1}), ensOverlap(rogers2024.groups(m).members, :, n), 1)
+        subplot(length(labels), length(rogers2024.groups), m + length(rogers2024.groups) * (n-1))
+        barWithError(ensOverlap(rogers2024.groups(m).members, :, n))
         xticks(1:length(labels2{1}))
         xticklabels(labels2{n})
         ylabel(labels{n})

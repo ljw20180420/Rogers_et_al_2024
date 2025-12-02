@@ -20,8 +20,8 @@ function [longRegistered, coordinates] = crossSeshAuto(cellreg, calciums, cellpr
         end
     end
    
-    for n=1:length(calciums)
-        if size(calciums{n}, 2) - 1 < cellIDs(end, n)
+    for m=1:length(calciums)
+        if size(calciums{m}, 2) - 1 < cellIDs(end, m)
             cellIDs = cellIDs(1:end-1, :);
         end
     end
@@ -29,12 +29,12 @@ function [longRegistered, coordinates] = crossSeshAuto(cellreg, calciums, cellpr
     
     
     %extract the traces of registered cells from each session
-    for n=1:length(calciums)
-        a = unique(cellIDs(:,n))+1;
-        f = table2array(calciums{n});
+    for m=1:length(calciums)
+        a = unique(cellIDs(:,m))+1;
+        f = table2array(calciums{m});
         f = f(:,2:end);
         f(isnan(f)) = 0;
-        longRegistered{n} = f(:,a);
+        longRegistered{m} = f(:,a);
     end
 
     if ~isempty(cellprops)
